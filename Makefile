@@ -92,6 +92,8 @@ images: image_bins
 		cp ${BIN_DIR}/${REL_OSARCH}/vc-$$name ./installer/dockerfile/$$name/;\
 		if [ ${REL_OSARCH} = linux/amd64 ];then\
 			docker build --no-cache -t $(IMAGE_PREFIX)-$$name:$(TAG) ./installer/dockerfile/$$name;\
+			docker tag $(IMAGE_PREFIX)-$$name:$(TAG) 10.170.67.35:5000/$(IMAGE_PREFIX)-$$name:$(TAG);\
+			docker push 10.170.67.35:5000/$(IMAGE_PREFIX)-$$name:$(TAG);\
 		elif [ ${REL_OSARCH} = linux/arm64 ];then\
 			docker build --no-cache -t $(IMAGE_PREFIX)-$$name-arm64:$(TAG) -f ./installer/dockerfile/$$name/Dockerfile.arm64 ./installer/dockerfile/$$name;\
 		else\
@@ -103,6 +105,8 @@ images: image_bins
 webhook-manager-base-image:
 	if [ ${REL_OSARCH} = linux/amd64 ];then\
 		docker build --no-cache -t $(IMAGE_PREFIX)-webhook-manager-base:$(TAG) ./installer/dockerfile/webhook-manager/ -f ./installer/dockerfile/webhook-manager/Dockerfile.base;\
+		docker tag $(IMAGE_PREFIX)-webhook-manager-base:$(TAG) 10.170.67.35:5000/$(IMAGE_PREFIX)-webhook-manager-base:$(TAG);\
+		docker push 10.170.67.35:5000/$(IMAGE_PREFIX)-webhook-manager-base:$(TAG);\
 	elif [ ${REL_OSARCH} = linux/arm64 ];then\
 		docker build --no-cache -t $(IMAGE_PREFIX)-webhook-manager-base-arm64:$(TAG) ./installer/dockerfile/webhook-manager/ -f ./installer/dockerfile/webhook-manager/Dockerfile.base.arm64;\
 	else\
