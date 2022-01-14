@@ -20,7 +20,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/kubernetes/pkg/controller/volume/scheduling"
+	scheduling "k8s.io/kubernetes/pkg/scheduler/framework/plugins/volumebinding"
 
 	"volcano.sh/volcano/pkg/scheduler/api"
 )
@@ -80,7 +80,7 @@ type VolumeBinder interface {
 
 //Binder interface for binding task and hostname
 type Binder interface {
-	Bind(kubeClient *kubernetes.Clientset, tasks []*api.TaskInfo) (error, []*api.TaskInfo)
+	Bind(kubeClient *kubernetes.Clientset, tasks []*api.TaskInfo) ([]*api.TaskInfo, error)
 }
 
 // Evictor interface for evict pods

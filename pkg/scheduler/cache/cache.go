@@ -36,7 +36,7 @@ import (
 	infov1 "k8s.io/client-go/informers/core/v1"
 	schedv1 "k8s.io/client-go/informers/scheduling/v1"
 	storagev1 "k8s.io/client-go/informers/storage/v1"
-	storagev1alpha1 "k8s.io/client-go/informers/storage/v1alpha1"
+	storagev1beta1 "k8s.io/client-go/informers/storage/v1beta1"
 	"k8s.io/client-go/kubernetes"
 	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
@@ -45,7 +45,7 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
-	volumescheduling "k8s.io/kubernetes/pkg/controller/volume/scheduling"
+	volumescheduling "k8s.io/kubernetes/pkg/scheduler/framework/plugins/volumebinding"
 
 	batch "volcano.sh/apis/pkg/apis/batch/v1alpha1"
 	"volcano.sh/apis/pkg/apis/scheduling"
@@ -96,7 +96,7 @@ type SchedulerCache struct {
 	quotaInformer              infov1.ResourceQuotaInformer
 	csiNodeInformer            storagev1.CSINodeInformer
 	csiDriverInformer          storagev1.CSIDriverInformer
-	csiStorageCapacityInformer storagev1alpha1.CSIStorageCapacityInformer
+	csiStorageCapacityInformer storagev1beta1.CSIStorageCapacityInformer
 	cpuInformer                cpuinformerv1.NumatopologyInformer
 
 	Binder         Binder
@@ -128,12 +128,12 @@ type SchedulerCache struct {
 	batchNum        int
 }
 
-type defaultBinder struct {
-	kubeclient *kubernetes.Clientset
+type DefaultBinder struct {
+	// kubeclient *kubernetes.Clientset
 }
 
 //Bind will send bind request to api server
-func (db *defaultBinder) Bind(kubeClient *kubernetes.Clientset, tasks []*schedulingapi.TaskInfo) (error, []*schedulingapi.TaskInfo) {
+func (db *DefaultBinder) Bind(kubeClient *kubernetes.Clientset, tasks []*schedulingapi.TaskInfo) ([]*schedulingapi.TaskInfo, error) {
 	var errTasks []*schedulingapi.TaskInfo
 	for _, task := range tasks {
 		p := task.Pod
@@ -152,14 +152,14 @@ func (db *defaultBinder) Bind(kubeClient *kubernetes.Clientset, tasks []*schedul
 	}
 
 	if len(errTasks) > 0 {
-		return fmt.Errorf("failed to bind pods"), errTasks
+		return errTasks, fmt.Errorf("failed to bind pods")
 	}
 
 	return nil, nil
 }
 
-func NewBinder() *defaultBinder {
-	return &defaultBinder{}
+func NewBinder() *DefaultBinder {
+	return &DefaultBinder{}
 }
 
 type defaultEvictor struct {
@@ -397,7 +397,6 @@ func newSchedulerCache(config *rest.Config, schedulerName string, defaultQueue s
 			key := nodeSelectorLabelName + ":" + nodeSelectorLabelValue
 			sc.nodeSelectorLabels[key] = ""
 		}
-
 	}
 	// Prepare event clients.
 	broadcaster := record.NewBroadcaster()
@@ -474,7 +473,7 @@ func newSchedulerCache(config *rest.Config, schedulerName string, defaultQueue s
 	sc.scInformer = informerFactory.Storage().V1().StorageClasses()
 	sc.csiNodeInformer = informerFactory.Storage().V1().CSINodes()
 	sc.csiDriverInformer = informerFactory.Storage().V1().CSIDrivers()
-	sc.csiStorageCapacityInformer = informerFactory.Storage().V1alpha1().CSIStorageCapacities()
+	sc.csiStorageCapacityInformer = informerFactory.Storage().V1beta1().CSIStorageCapacities()
 
 	var capacityCheck *volumescheduling.CapacityCheck
 	if options.ServerOpts.EnableCSIStorage {
@@ -676,7 +675,7 @@ func (sc *SchedulerCache) Evict(taskInfo *schedulingapi.TaskInfo, reason string)
 func (sc *SchedulerCache) Bind(tasks []*schedulingapi.TaskInfo) error {
 	go func(taskArray []*schedulingapi.TaskInfo) {
 		tmp := time.Now()
-		err, errTasks := sc.Binder.Bind(sc.kubeClient, taskArray)
+		errTasks, err := sc.Binder.Bind(sc.kubeClient, taskArray)
 		if err == nil {
 			klog.V(3).Infof("bind ok, latency %v", time.Since(tmp))
 			for _, task := range tasks {
@@ -690,7 +689,6 @@ func (sc *SchedulerCache) Bind(tasks []*schedulingapi.TaskInfo) error {
 			}
 		}
 	}(tasks)
-
 	return nil
 }
 
@@ -852,6 +850,12 @@ func (sc *SchedulerCache) AddBindTask(taskInfo *schedulingapi.TaskInfo) error {
 		return err
 	}
 
+	err = taskInfo.SetPodResourceDecision()
+	if err != nil {
+		return fmt.Errorf("set task %v/%v resource decision failed, err %v", task.Namespace, task.Name, err)
+	}
+	task.NumaInfo = taskInfo.NumaInfo.Clone()
+
 	// Add task to the node.
 	if err := node.AddTask(task); err != nil {
 		// After failing to update task to a node we need to revert task status from Releasing,
@@ -882,6 +886,7 @@ func (sc *SchedulerCache) processBindTask() {
 			if len(sc.bindCache) == sc.batchNum {
 				sc.BindTask()
 			}
+		default:
 		}
 
 		if len(sc.BindFlowChannel) == 0 {
@@ -917,7 +922,6 @@ func (sc *SchedulerCache) BindTask() {
 	}
 
 	sc.bindCache = sc.bindCache[0:0]
-	return
 }
 
 // Snapshot returns the complete snapshot of the cluster from cache
