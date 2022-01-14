@@ -41,7 +41,7 @@ rules:
     verbs: ["get"]
   - apiGroups: ["scheduling.incubator.k8s.io", "scheduling.volcano.sh"]
     resources: ["podgroups"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list", "watch", "create"]
 
 ---
 kind: ClusterRoleBinding

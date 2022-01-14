@@ -20,6 +20,7 @@ CRD_OPTIONS ?= "crd:crdVersions=v1,generateEmbeddedObjectMeta=true"
 CC ?= "gcc"
 SUPPORT_PLUGINS ?= "no"
 CRD_VERSION ?= v1
+date=$(shell date +%s)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -101,6 +102,60 @@ images: image_bins
 		fi;\
 		rm installer/dockerfile/$$name/vc-$$name;\
 	done
+
+image_bins_controller: init
+	GO111MODULE=off go get github.com/mitchellh/gox
+	CC=${CC} CGO_ENABLED=0 $(GOBIN)/gox -osarch=${REL_OSARCH} -ldflags ${LD_FLAGS} -output ${BIN_DIR}/${REL_OSARCH}/vcctl ./cmd/cli
+	for name in controller-manager; do\
+		CC=${CC} CGO_ENABLED=0 $(GOBIN)/gox -osarch=${REL_OSARCH} -ldflags ${LD_FLAGS} -output ${BIN_DIR}/${REL_OSARCH}/vc-$$name ./cmd/$$name; \
+	done
+
+deployctr: image_bins_controller
+	for name in controller-manager; do\
+    	cp ${BIN_DIR}/${REL_OSARCH}/vc-$$name ./installer/dockerfile/$$name/;\
+      	docker build --no-cache -t $(IMAGE_PREFIX)-$$name:latest ./installer/dockerfile/$$name;\
+      	docker tag $(IMAGE_PREFIX)-$$name:latest 10.170.67.35:5000/$(IMAGE_PREFIX)-$$name:latest;\
+      	docker push 10.170.67.35:5000/$(IMAGE_PREFIX)-$$name:latest;\
+  		rm installer/dockerfile/$$name/vc-$$name;\
+    done;\
+    kubectl patch deployment -n volcano-system volcano-controllers -p '{"spec":{"template":{"spec":{"containers":[{"name":"volcano-controllers","env":[{"name":"RESTART_","value":"'${date}'"}]}]}}}}'
+
+
+image_bins_webhook: init
+	GO111MODULE=off go get github.com/mitchellh/gox
+	CC=${CC} CGO_ENABLED=0 $(GOBIN)/gox -osarch=${REL_OSARCH} -ldflags ${LD_FLAGS} -output ${BIN_DIR}/${REL_OSARCH}/vcctl ./cmd/cli
+	for name in webhook-manager; do\
+		CC=${CC} CGO_ENABLED=0 $(GOBIN)/gox -osarch=${REL_OSARCH} -ldflags ${LD_FLAGS} -output ${BIN_DIR}/${REL_OSARCH}/vc-$$name ./cmd/$$name; \
+	done
+
+deploywh: image_bins_webhook
+	for name in webhook-manager; do\
+    	cp ${BIN_DIR}/${REL_OSARCH}/vc-$$name ./installer/dockerfile/$$name/;\
+      	docker build --no-cache -t $(IMAGE_PREFIX)-$$name:latest ./installer/dockerfile/$$name;\
+      	docker tag $(IMAGE_PREFIX)-$$name:latest 10.170.67.35:5000/$(IMAGE_PREFIX)-$$name:latest;\
+      	docker push 10.170.67.35:5000/$(IMAGE_PREFIX)-$$name:latest;\
+  		rm installer/dockerfile/$$name/vc-$$name;\
+    done;\
+    kubectl patch deployment -n volcano-system volcano-admission -p '{"spec":{"template":{"spec":{"containers":[{"name":"admission","env":[{"name":"RESTART_","value":"'${date}'"}]}]}}}}'
+
+image_bins_scheduler: init
+	GO111MODULE=off go get github.com/mitchellh/gox
+	CC=${CC} CGO_ENABLED=0 $(GOBIN)/gox -osarch=${REL_OSARCH} -ldflags ${LD_FLAGS} -output ${BIN_DIR}/${REL_OSARCH}/vcctl ./cmd/cli
+	if [ ${SUPPORT_PLUGINS} = "yes" ];then\
+		CC=${CC} CGO_ENABLED=1 $(GOBIN)/gox -osarch=${REL_OSARCH} -ldflags ${LD_FLAGS} -output ${BIN_DIR}/${REL_OSARCH}/vc-scheduler ./cmd/scheduler;\
+	else\
+	 	CC=${CC} CGO_ENABLED=0 $(GOBIN)/gox -osarch=${REL_OSARCH} -ldflags ${LD_FLAGS} -output ${BIN_DIR}/${REL_OSARCH}/vc-scheduler ./cmd/scheduler;\
+  	fi;
+
+deploysc: image_bins_scheduler
+	for name in scheduler; do\
+    	cp ${BIN_DIR}/${REL_OSARCH}/vc-$$name ./installer/dockerfile/$$name/;\
+      	docker build --no-cache -t $(IMAGE_PREFIX)-$$name:latest ./installer/dockerfile/$$name;\
+      	docker tag $(IMAGE_PREFIX)-$$name:latest 10.170.67.35:5000/$(IMAGE_PREFIX)-$$name:latest;\
+      	docker push 10.170.67.35:5000/$(IMAGE_PREFIX)-$$name:latest;\
+  		rm installer/dockerfile/$$name/vc-$$name;\
+    done;\
+    kubectl patch deployment -n volcano-system volcano-scheduler -p '{"spec":{"template":{"spec":{"containers":[{"name":"volcano-scheduler","env":[{"name":"RESTART_","value":"'${date}'"}]}]}}}}'
 
 webhook-manager-base-image:
 	if [ ${REL_OSARCH} = linux/amd64 ];then\

@@ -64,7 +64,7 @@ rules:
     verbs: ["get", "list", "watch", "create", "delete"]
   - apiGroups: ["scheduling.incubator.k8s.io", "scheduling.volcano.sh"]
     resources: ["podgroups"]
-    verbs: ["list", "watch", "update"]
+    verbs: ["list", "watch", "update", "create", "delete"]
   - apiGroups: ["nodeinfo.volcano.sh"]
     resources: ["numatopologies"]
     verbs: ["get", "list", "watch", "delete"]
@@ -136,7 +136,7 @@ metadata:
     prometheus.io/port: "8080"
     prometheus.io/scrape: "true"
   name: {{ .Release.Name }}-scheduler-service
-  namespace: {{ .Release.Namespace }} 
+  namespace: {{ .Release.Namespace }}
 spec:
   ports:
   - port: 8080

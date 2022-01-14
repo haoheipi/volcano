@@ -80,7 +80,7 @@ func DecodePod(object runtime.RawExtension, resource metav1.GroupVersionResource
 	if _, _, err := deserializer.Decode(raw, nil, &pod); err != nil {
 		return &pod, err
 	}
-	klog.V(3).Infof("the pod struct is %+v", pod)
+	//klog.V(3).Infof("the pod struct is %+v", pod)
 
 	return &pod, nil
 }

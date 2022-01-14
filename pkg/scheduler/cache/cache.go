@@ -584,6 +584,9 @@ func newSchedulerCache(config *rest.Config, schedulerName string, defaultQueue s
 func (sc *SchedulerCache) Run(stopCh <-chan struct{}) {
 	sc.informerFactory.Start(stopCh)
 	sc.vcInformerFactory.Start(stopCh)
+	// get other node metrics info
+	go wait.Until(sc.processNodeMetrics, time.Millisecond*20, stopCh)
+
 	// Re-sync error tasks.
 	go wait.Until(sc.processResyncTask, 0, stopCh)
 
@@ -1123,4 +1126,25 @@ func (sc *SchedulerCache) recordPodGroupEvent(podGroup *schedulingapi.PodGroup, 
 		return
 	}
 	sc.Recorder.Eventf(pg, eventType, reason, msg)
+}
+
+func (sc *SchedulerCache) checkDeletePodGroup(pod *v1.Pod, pi *schedulingapi.TaskInfo) {
+	if pod.Annotations != nil {
+		if strings.Contains(pod.Annotations[vcv1beta1.KubeGroupNameAnnotationKey], "spark-edm") {
+			if job, found := sc.Jobs[pi.Job]; found && len(job.Tasks) == 0 {
+				// Delete PodGroup
+				klog.V(4).Infof("====delete podGroup:%v", job.Name)
+				if err := sc.vcClient.SchedulingV1beta1().PodGroups(job.Namespace).Delete(context.TODO(), job.Name, metav1.DeleteOptions{}); err != nil {
+					if !apierrors.IsNotFound(err) {
+						klog.Errorf("Failed to delete PodGroup of Job %v/%v: %v",
+							job.Namespace, job.Name, err)
+					}
+				}
+			}
+		}
+	}
+}
+
+func (sc *SchedulerCache) processNodeMetrics() {
+	RequestPromInfo()
 }

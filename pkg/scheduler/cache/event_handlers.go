@@ -45,6 +45,7 @@ func isTerminated(status schedulingapi.TaskStatus) bool {
 // getOrCreateJob will return corresponding Job for pi if it exists, or it will create a Job and return it if
 // pi.Pod.Spec.SchedulerName is same as volcano scheduler's name, otherwise it will return nil.
 func (sc *SchedulerCache) getOrCreateJob(pi *schedulingapi.TaskInfo) *schedulingapi.JobInfo {
+	klog.V(2).Infof("piName: %v,PiJob: %v", pi.Name, pi.Job)
 	if len(pi.Job) == 0 {
 		if pi.Pod.Spec.SchedulerName != sc.schedulerName {
 			klog.V(4).Infof("Pod %s/%s will not scheduled by %s, skip creating PodGroup and Job for it",
@@ -84,6 +85,7 @@ func (sc *SchedulerCache) addTask(pi *schedulingapi.TaskInfo) error {
 	}
 
 	job := sc.getOrCreateJob(pi)
+	klog.V(2).Infof("===job if nil:%v", job == nil)
 	if job != nil {
 		job.AddTaskInfo(pi)
 	}
@@ -200,7 +202,7 @@ func (sc *SchedulerCache) deletePod(pod *v1.Pod) error {
 	if err := sc.deleteTask(task); err != nil {
 		klog.Warningf("Failed to delete task: %v", err)
 	}
-
+	sc.checkDeletePodGroup(pod, pi)
 	// If job was terminated, delete it.
 	if job, found := sc.Jobs[pi.Job]; found && schedulingapi.JobTerminated(job) {
 		sc.deleteJob(job)

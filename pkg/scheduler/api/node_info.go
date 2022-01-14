@@ -274,7 +274,7 @@ func (ni *NodeInfo) setNodeState(node *v1.Node) {
 		Reason: "",
 	}
 
-	klog.V(4).Infof("set the node %s status to %s.", node.Name, Ready.String())
+	//klog.V(4).Infof("set the node %s status to %s.", node.Name, Ready.String())
 }
 
 func (ni *NodeInfo) setNodeGPUInfo(node *v1.Node) {

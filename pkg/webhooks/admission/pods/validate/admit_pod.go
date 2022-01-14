@@ -19,9 +19,6 @@ package validate
 import (
 	"context"
 	"fmt"
-	"strconv"
-	"strings"
-
 	"k8s.io/api/admission/v1beta1"
 	whv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	v1 "k8s.io/api/core/v1"
@@ -29,6 +26,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/klog"
+	"strconv"
+	"strings"
 
 	"volcano.sh/apis/pkg/apis/helpers"
 	vcv1beta1 "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
@@ -101,6 +100,7 @@ allow pods to create when
 4. check pod budget annotations configure
 */
 func validatePod(pod *v1.Pod, reviewResponse *v1beta1.AdmissionResponse) string {
+	klog.V(3).Infof("====begin")
 	if pod.Spec.SchedulerName != config.SchedulerName {
 		return ""
 	}
@@ -112,8 +112,15 @@ func validatePod(pod *v1.Pod, reviewResponse *v1beta1.AdmissionResponse) string 
 	if pod.Annotations != nil {
 		pgName = pod.Annotations[vcv1beta1.KubeGroupNameAnnotationKey]
 	}
+	klog.V(3).Infof("====pgName：%v", pgName)
 	if pgName != "" {
-		if err := checkPGPhase(pod, pgName, true); err != nil {
+		klog.V(4).Infof("====122223")
+		if strings.Contains(pgName, "spark-edm") {
+			if err := createPodGroup(pgName, pod); err != nil {
+				msg = err.Error()
+				reviewResponse.Allowed = false
+			}
+		} else if err := checkPGPhase(pod, pgName, true); err != nil {
 			msg = err.Error()
 			reviewResponse.Allowed = false
 		}
@@ -134,6 +141,28 @@ func validatePod(pod *v1.Pod, reviewResponse *v1beta1.AdmissionResponse) string 
 	}
 
 	return msg
+}
+
+// todo podgroup根据pod annotation来
+func createPodGroup(pgName string, pod *v1.Pod) error {
+	_, err := config.VolcanoClient.SchedulingV1beta1().PodGroups(pod.Namespace).Get(context.TODO(), pgName, metav1.GetOptions{})
+	klog.V(4).Infof("====123")
+	if err != nil {
+		klog.V(4).Infof("====begin create podgroup")
+		_, err := config.VolcanoClient.SchedulingV1beta1().PodGroups(pod.Namespace).Create(context.TODO(), &vcv1beta1.PodGroup{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: pgName,
+			},
+			Spec: vcv1beta1.PodGroupSpec{
+				MinMember: 4,
+				Queue:     "default",
+			},
+		}, metav1.CreateOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to create PodGroup for pod <%s/%s>: %v", pod.Namespace, pod.Name, err)
+		}
+	}
+	return nil
 }
 
 func checkPGPhase(pod *v1.Pod, pgName string, isVCJob bool) error {
