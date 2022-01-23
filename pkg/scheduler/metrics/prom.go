@@ -35,6 +35,94 @@ func NewPromClient(addr string) (*PromClient, error) {
 	return promDao, nil
 }
 
+func (promClient *PromClient) RequestPromDemo() (map[string]int64, error) {
+	// d.promClient.ExecPromQL("up")
+	// d.promClient.ExecPromQL(`increase(node_network_receive_bytes_total{device=~"eth0"}[30s])`)
+	err, result := promClient.ExecPromQL(`max(irate(node_network_receive_bytes_total[30s])*8/1024) by (job)`)
+	if err != nil {
+		return nil, nil
+	}
+	return promClient.parsePromResultInt64(result, 1)
+}
+
+// RequestPromUpNetIO 获取网络上传负载
+// 单位 kB/s
+func (promClient *PromClient) RequestPromUpNetIO(netType string) (map[string]int64, error) {
+	promQL := fmt.Sprintf("avg(irate(node_network_transmit_bytes_total{device=\"%s\"}[30s])/1000) by (instance)", netType)
+
+	err, result := promClient.ExecPromQL(promQL)
+	if err != nil {
+		return nil, err
+	}
+
+	return promClient.parsePromResultInt64(result, 1)
+}
+
+// RequestPromNetIO 获取网络下载负载
+func (promClient *PromClient) RequestPromDownNetIO(netType string) (map[string]int64, error) {
+	promQL := fmt.Sprintf("avg(irate(node_network_receive_bytes_total{device=\"%s\"}[30s])/1000) by (instance)", netType)
+	err, result := promClient.ExecPromQL(promQL)
+	if err != nil {
+		return nil, err
+	}
+
+	return promClient.parsePromResultInt64(result, 1)
+}
+
+// RequestPromWriteDiskIO 查询Prom上机器的写DiskIO
+// 单位 kB/s
+func (promClient *PromClient) RequestPromWriteDiskIO(diskType string) (map[string]int64, error) {
+	promQL := fmt.Sprintf("avg(irate(node_disk_written_bytes_total{device=\"%s\"}[30s])/1000) by (instance)", diskType)
+
+	err, result := promClient.ExecPromQL(promQL)
+	if err != nil {
+		return nil, err
+	}
+
+	return promClient.parsePromResultInt64(result, 1)
+}
+
+// RequestPromReadDiskIO 查询Prom上机器的读DiskIO
+// 单位 kB/s
+func (promClient *PromClient) RequestPromReadDiskIO(diskType string) (map[string]int64, error) {
+	promQL := fmt.Sprintf("avg(irate(node_disk_read_bytes_total{device=\"%s\"}[30s])/1000) by (instance)", diskType)
+
+	err, result := promClient.ExecPromQL(promQL)
+	if err != nil {
+		return nil, err
+	}
+
+	return promClient.parsePromResultInt64(result, 1)
+}
+
+// RequestPromCPUUsage 查询Prom上机器的CPU使用率
+// 取小数点后3位有效数字后转换成int64，相比float64满足精度的前提下提高计算速度
+// e.g.: 0.012->12 23.453453245->23453
+func (promClient *PromClient) RequestPromCPUUsage() (map[string]int64, error) {
+	promQL := `(1 - avg(irate(node_cpu_seconds_total{mode="idle"}[30s])) by (instance))`
+
+	err, result := promClient.ExecPromQL(promQL)
+	if err != nil {
+		return nil, err
+	}
+
+	return promClient.parsePromResultInt64(result, 1000)
+}
+
+// RequestPromMemUsage 查询Prom上机器的内存使用率
+// 取小数点后3位有效数字后转换成int64，相比float64满足精度的前提下提高计算速度
+// e.g.: 0.012->12 23.453453245->23453
+func (promClient *PromClient) RequestPromMemUsage() (map[string]int64, error) {
+	promQL := `(1 - (avg(node_memory_MemAvailable_bytes) by (instance)  / avg(node_memory_MemTotal_bytes) by (instance) ) )`
+
+	err, result := promClient.ExecPromQL(promQL)
+	if err != nil {
+		return nil, err
+	}
+
+	return promClient.parsePromResultInt64(result, 1000)
+}
+
 // func (promDao *PromClient) ExecPromQL(promQL string) (error, model.Value) {
 func (promClient *PromClient) ExecPromQL(promQL string) (error, model.Value) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -52,16 +140,6 @@ func (promClient *PromClient) ExecPromQL(promQL string) (error, model.Value) {
 	return nil, result
 }
 
-func (promClient *PromClient) RequestPromDemo() (map[string]int64, error) {
-	// d.promClient.ExecPromQL("up")
-	// d.promClient.ExecPromQL(`increase(node_network_receive_bytes_total{device=~"eth0"}[30s])`)
-	err, result := promClient.ExecPromQL(`max(irate(node_network_receive_bytes_total[30s])*8/1024) by (job)`)
-	if err != nil {
-		return nil, nil
-	}
-	return promClient.parsePromResultInt64(result, 1)
-}
-
 func (promClient *PromClient) parsePromResultInt64(result model.Value, base int) (map[string]int64, error) {
 	vectorValue, ok := result.(model.Vector)
 	if !ok {
@@ -74,9 +152,9 @@ func (promClient *PromClient) parsePromResultInt64(result model.Value, base int)
 		tmp := vectorValue[i]
 		tmpv := float64(tmp.Value)
 		if base > 1 {
-			resMap[string(tmp.Metric["job"])] = int64(math.Round(tmpv * float64(base)))
+			resMap[string(tmp.Metric["instance"])] = int64(math.Round(tmpv * float64(base)))
 		} else {
-			resMap[string(tmp.Metric["job"])] = int64(math.Round(tmpv))
+			resMap[string(tmp.Metric["instance"])] = int64(math.Round(tmpv))
 		}
 	}
 
@@ -93,111 +171,8 @@ func (promClient *PromClient) parsePromResultFloat64(result model.Value) (map[st
 	resMap := make(map[string]float64)
 	for i := 0; i < len(vectorValue); i++ {
 		tmp := vectorValue[i]
-		resMap[string(tmp.Metric["job"])] = float64(tmp.Value)
+		resMap[string(tmp.Metric["instance"])] = float64(tmp.Value)
 	}
 
 	return resMap, nil
-}
-
-// RequestPromUpNetIO 获取网络上传负载
-// 单位 kbit/s
-func (promClient *PromClient) RequestPromUpNetIO() (map[string]int64, error) {
-	promQL := `max(irate(node_network_transmit_bytes_total[30s])*8/1000) by (job)`
-
-	err, result := promClient.ExecPromQL(promQL)
-	if err != nil {
-		return nil, err
-	}
-
-	return promClient.parsePromResultInt64(result, 1)
-}
-
-// RequestPromNetIO 获取网络下载负载
-func (promClient *PromClient) RequestPromDownNetIO() (map[string]int64, error) {
-	promQL := `max(irate(node_network_receive_bytes_total[30s])*8/1000) by (job)`
-	err, result := promClient.ExecPromQL(promQL)
-	if err != nil {
-		return nil, err
-	}
-
-	return promClient.parsePromResultInt64(result, 1)
-}
-
-// RequestPromMaxNetIO 查询上行/下行中最大网络IO
-// 单位 kbit/s
-func (promClient *PromClient) RequestPromMaxNetIO() (map[string]int64, error) {
-	promQL := `(max(irate(node_network_receive_bytes_total[30s])*8/1000) by (job)) > (max(irate(node_network_transmit_bytes_total[30s])*8/1024) by (job)) or (max(irate(node_network_transmit_bytes_total[30s])*8/1024) by (job))`
-
-	err, result := promClient.ExecPromQL(promQL)
-	if err != nil {
-		return nil, err
-	}
-
-	return promClient.parsePromResultInt64(result, 1)
-}
-
-// RequestPromWriteDiskIO 查询Prom上机器的写DiskIO
-// 单位byte/s 或者 B/s
-func (promClient *PromClient) RequestPromWriteDiskIO(diskType string) (map[string]int64, error) {
-	promQL := `max(irate(node_disk_written_bytes_total[30s])) by (job)`
-
-	err, result := promClient.ExecPromQL(promQL)
-	if err != nil {
-		return nil, err
-	}
-
-	return promClient.parsePromResultInt64(result, 1)
-}
-
-// RequestPromWriteDiskIO 查询Prom上机器的读DiskIO
-// 单位byte/s 或者 B/s
-func (promClient *PromClient) RequestPromReadDiskIO(diskType string) (map[string]int64, error) {
-	promQL := `max(irate(node_disk_read_bytes_total[30s])) by (job)`
-
-	err, result := promClient.ExecPromQL(promQL)
-	if err != nil {
-		return nil, err
-	}
-
-	return promClient.parsePromResultInt64(result, 1)
-}
-
-// RequestPromMaxDiskIO 查询读/写中最大磁盘IO
-func (promClient *PromClient) RequestPromMaxDiskIO() (map[string]int64, error) {
-	promQL := `(max(irate(node_disk_written_bytes_total[30s])) by (job)) > (max(irate(node_disk_read_bytes_total[30s])) by (job)) or (max(irate(node_disk_read_bytes_total[30s])) by (job))`
-
-	err, result := promClient.ExecPromQL(promQL)
-	if err != nil {
-		return nil, err
-	}
-
-	return promClient.parsePromResultInt64(result, 1)
-}
-
-// RequestPromCPUUsage 查询Prom上机器的CPU使用率
-// 取4位有效数字后转换成int64，相比float64满足精度的前提下提高计算速度
-// e.g.: 0.012->12 23.453453245->2345
-func (promClient *PromClient) RequestPromCPUUsage() (map[string]int64, error) {
-	promQL := `(1 - avg(rate(node_cpu_seconds_total{mode="idle"}[30s])) by (job))`
-
-	err, result := promClient.ExecPromQL(promQL)
-	if err != nil {
-		return nil, err
-	}
-
-	return promClient.parsePromResultInt64(result, 100)
-}
-
-// RequestPromMemUsage 查询Prom上机器的内存使用率
-// 取4位有效数字后转换成int64，相比float64满足精度的前提下提高计算速度
-// e.g.: 0.012->12 23.453453245->2345
-func (promClient *PromClient) RequestPromMemUsage() (map[string]int64, error) {
-	promQL := `(1 - (node_memory_MemAvailable_bytes / (node_memory_MemTotal_bytes)))`
-
-	err, result := promClient.ExecPromQL(promQL)
-	if err != nil {
-		return nil, err
-	}
-
-	return promClient.parsePromResultInt64(result, 100)
 }
