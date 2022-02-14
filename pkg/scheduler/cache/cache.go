@@ -607,8 +607,6 @@ func newSchedulerCache(config *rest.Config, schedulerName string, defaultQueue s
 func (sc *SchedulerCache) Run(stopCh <-chan struct{}) {
 	sc.informerFactory.Start(stopCh)
 	sc.vcInformerFactory.Start(stopCh)
-	// get other node metrics info
-	go wait.Until(sc.processNodeMetrics, time.Millisecond*20, stopCh)
 
 	// Re-sync error tasks.
 	go wait.Until(sc.processResyncTask, 0, stopCh)
@@ -1173,8 +1171,4 @@ func (sc *SchedulerCache) checkDeletePodGroup(pod *v1.Pod, pi *schedulingapi.Tas
 			}
 		}
 	}
-}
-
-func (sc *SchedulerCache) processNodeMetrics() {
-	RequestPromInfo()
 }

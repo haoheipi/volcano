@@ -3,6 +3,7 @@ package metrics
 import (
 	"fmt"
 	"testing"
+	schedulerapi "volcano.sh/volcano/pkg/scheduler/api"
 )
 
 func TestGetPromData(t *testing.T) {
@@ -19,5 +20,15 @@ func TestGetPromData(t *testing.T) {
 
 	for key, value := range requestPromDemo {
 		fmt.Printf("key:%v   value:%v\n", key, value)
+	}
+}
+
+func TestGetScore(t *testing.T) {
+	var jobId schedulerapi.JobID = "test"
+	Score("k8smaster1", jobId)
+	for id, value := range cacheMap {
+		for k, v := range value {
+			fmt.Printf("id:%v  key:%v  value:%v\n", id, k, v)
+		}
 	}
 }

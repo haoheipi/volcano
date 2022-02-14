@@ -19,6 +19,7 @@ package nodeorder
 import (
 	"context"
 	"fmt"
+	"volcano.sh/volcano/pkg/scheduler/metrics"
 
 	v1 "k8s.io/api/core/v1"
 	utilFeature "k8s.io/apiserver/pkg/util/feature"
@@ -58,6 +59,8 @@ const (
 	TaintTolerationWeight = "tainttoleration.weight"
 	// ImageLocalityWeight is the key for providing Image Locality Priority Weight in YAML
 	ImageLocalityWeight = "imagelocality.weight"
+	// McrsWeight is the key for providing Multi-criteria resources Priority Weight in YAML
+	MultiCriteriaWeight = "multicriteria.weight"
 )
 
 type nodeOrderPlugin struct {
@@ -82,6 +85,7 @@ type priorityWeight struct {
 	balancedResourceWeight int
 	taintTolerationWeight  int
 	imageLocalityWeight    int
+	multiCriteriaWeight    int
 }
 
 // calculateWeight from the provided arguments.
@@ -122,6 +126,7 @@ func calculateWeight(args framework.Arguments) priorityWeight {
 		balancedResourceWeight: 1,
 		taintTolerationWeight:  1,
 		imageLocalityWeight:    1,
+		multiCriteriaWeight:    1,
 	}
 
 	// Checks whether nodeaffinity.weight is provided or not, if given, modifies the value in weight struct.
@@ -144,6 +149,9 @@ func calculateWeight(args framework.Arguments) priorityWeight {
 
 	// Checks whether imagelocality.weight is provided or not, if given, modifies the value in weight struct.
 	args.GetInt(&weight.imageLocalityWeight, ImageLocalityWeight)
+
+	// Checks whether multiCriteria.weight is provided or not, if given, modifies the value in weight struct.
+	args.GetInt(&weight.multiCriteriaWeight, MultiCriteriaWeight)
 
 	return weight
 }
@@ -251,7 +259,7 @@ func (pp *nodeOrderPlugin) OnSessionOpen(ssn *framework.Session) {
 				return 0, status.AsError()
 			}
 
-			klog.V(4).Infof("imageLocalityWeight Score for task %s/%s on node %s is: %f", task.Namespace, task.Name, node.Name, score)
+			klog.V(4).Infof("imageLocalityWeight Score for task %s/%s on node %s is: %v", task.Namespace, task.Name, node.Name, score)
 			// If imageLocalityWeight is provided, host.Score is multiplied with weight, if not, host.Score is added to total score.
 			nodeScore += float64(score) * float64(weight.imageLocalityWeight)
 		}
@@ -264,7 +272,7 @@ func (pp *nodeOrderPlugin) OnSessionOpen(ssn *framework.Session) {
 				return 0, status.AsError()
 			}
 
-			klog.V(4).Infof("leastReqWeight Score for task %s/%s on node %s is: %f", task.Namespace, task.Name, node.Name, score)
+			klog.V(4).Infof("leastReqWeight Score for task %s/%s on node %s is: %v", task.Namespace, task.Name, node.Name, score)
 			// If leastReqWeight is provided, host.Score is multiplied with weight, if not, host.Score is added to total score.
 			nodeScore += float64(score) * float64(weight.leastReqWeight)
 		}
@@ -277,7 +285,7 @@ func (pp *nodeOrderPlugin) OnSessionOpen(ssn *framework.Session) {
 				return 0, status.AsError()
 			}
 
-			klog.V(4).Infof("mostReqWeight Score for task %s/%s on node %s is: %f", task.Namespace, task.Name, node.Name, score)
+			klog.V(4).Infof("mostReqWeight Score for task %s/%s on node %s is: %v", task.Namespace, task.Name, node.Name, score)
 			// If mostRequestedWeight is provided, host.Score is multiplied with weight, it's 0 by default
 			nodeScore += float64(score) * float64(weight.mostReqWeight)
 		}
@@ -290,9 +298,18 @@ func (pp *nodeOrderPlugin) OnSessionOpen(ssn *framework.Session) {
 				return 0, status.AsError()
 			}
 
-			klog.V(4).Infof("balancedResourceWeight Score for task %s/%s on node %s is: %f", task.Namespace, task.Name, node.Name, score)
+			klog.V(4).Infof("balancedResourceWeight Score for task %s/%s on node %s is: %v", task.Namespace, task.Name, node.Name, score)
 			// If balancedResourceWeight is provided, host.Score is multiplied with weight, if not, host.Score is added to total score.
 			nodeScore += float64(score) * float64(weight.balancedResourceWeight)
+		}
+
+		// MultiCriteriaAllocation
+		if weight.multiCriteriaWeight != 0 {
+			score := metrics.Score(node.Name, task.Job)
+			if score >= 0 && score <= 100 {
+				klog.V(4).Infof("multiCriteriaWeight Score for task %s/%s on node %s is: %v", task.Namespace, task.Name, node.Name, score)
+				nodeScore += float64(score) * float64(weight.multiCriteriaWeight)
+			}
 		}
 
 		// NodeAffinity
@@ -305,7 +322,7 @@ func (pp *nodeOrderPlugin) OnSessionOpen(ssn *framework.Session) {
 
 			// TODO: should we normalize the score
 			// If nodeAffinityWeight is provided, host.Score is multiplied with weight, if not, host.Score is added to total score.
-			klog.V(4).Infof("nodeAffinityWeight Score for task %s/%s on node %s is: %f", task.Namespace, task.Name, node.Name, score)
+			klog.V(4).Infof("nodeAffinityWeight Score for task %s/%s on node %s is: %v", task.Namespace, task.Name, node.Name, score)
 			nodeScore += float64(score) * float64(weight.nodeAffinityWeight)
 		}
 
