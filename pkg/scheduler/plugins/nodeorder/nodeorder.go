@@ -259,7 +259,6 @@ func (pp *nodeOrderPlugin) OnSessionOpen(ssn *framework.Session) {
 				return 0, status.AsError()
 			}
 
-			klog.V(4).Infof("imageLocalityWeight Score for task %s/%s on node %s is: %v", task.Namespace, task.Name, node.Name, score)
 			// If imageLocalityWeight is provided, host.Score is multiplied with weight, if not, host.Score is added to total score.
 			nodeScore += float64(score) * float64(weight.imageLocalityWeight)
 		}
@@ -272,7 +271,6 @@ func (pp *nodeOrderPlugin) OnSessionOpen(ssn *framework.Session) {
 				return 0, status.AsError()
 			}
 
-			klog.V(4).Infof("leastReqWeight Score for task %s/%s on node %s is: %v", task.Namespace, task.Name, node.Name, score)
 			// If leastReqWeight is provided, host.Score is multiplied with weight, if not, host.Score is added to total score.
 			nodeScore += float64(score) * float64(weight.leastReqWeight)
 		}
@@ -285,7 +283,6 @@ func (pp *nodeOrderPlugin) OnSessionOpen(ssn *framework.Session) {
 				return 0, status.AsError()
 			}
 
-			klog.V(4).Infof("mostReqWeight Score for task %s/%s on node %s is: %v", task.Namespace, task.Name, node.Name, score)
 			// If mostRequestedWeight is provided, host.Score is multiplied with weight, it's 0 by default
 			nodeScore += float64(score) * float64(weight.mostReqWeight)
 		}
@@ -298,7 +295,6 @@ func (pp *nodeOrderPlugin) OnSessionOpen(ssn *framework.Session) {
 				return 0, status.AsError()
 			}
 
-			klog.V(4).Infof("balancedResourceWeight Score for task %s/%s on node %s is: %v", task.Namespace, task.Name, node.Name, score)
 			// If balancedResourceWeight is provided, host.Score is multiplied with weight, if not, host.Score is added to total score.
 			nodeScore += float64(score) * float64(weight.balancedResourceWeight)
 		}
@@ -322,7 +318,6 @@ func (pp *nodeOrderPlugin) OnSessionOpen(ssn *framework.Session) {
 
 			// TODO: should we normalize the score
 			// If nodeAffinityWeight is provided, host.Score is multiplied with weight, if not, host.Score is added to total score.
-			klog.V(4).Infof("nodeAffinityWeight Score for task %s/%s on node %s is: %v", task.Namespace, task.Name, node.Name, score)
 			nodeScore += float64(score) * float64(weight.nodeAffinityWeight)
 		}
 
